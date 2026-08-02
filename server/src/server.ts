@@ -91,7 +91,7 @@ Return valid JSON using this exact structure:
 Requirements:
 - Use the requested tone.
 - Refer naturally to the customer's actual concern.
-- Do not invent refunds, discounts, investigations, or actions that were not provided.
+- Do not assume the business type, location, product, or service unless the review clearly states it.
 - Do not blame the customer.
 - Keep the response between 40 and 90 words.
 - Set requiresApproval to true when the review includes serious dissatisfaction, service failure, safety concerns, legal concerns, billing disputes, threats, discrimination, or other sensitive issues.
