@@ -17,12 +17,25 @@ const ai = new GoogleGenAI({
   apiKey,
 })
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.CLIENT_URL,
+].filter((origin): origin is string => Boolean(origin))
+
 app.use(
   cors({
-    origin: 'http://localhost:5173',
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+        return
+      }
+
+      callback(new Error('Origin is not allowed by CORS.'))
+    },
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
   }),
 )
-
 app.use(express.json())
 
 app.get('/api/health', (_request: Request, response: Response) => {
