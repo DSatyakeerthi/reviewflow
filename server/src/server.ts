@@ -25,7 +25,12 @@ const allowedOrigins = [
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      const isAllowed =
+        !origin ||
+        origin === 'http://localhost:5173' ||
+        origin.endsWith('.vercel.app')
+
+      if (isAllowed) {
         callback(null, true)
         return
       }
