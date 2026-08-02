@@ -9,6 +9,7 @@ type HistoryItem = {
   review: string
   rating: string
   tone: Tone
+  responseLength: ResponseLength
   response: string
   requiresApproval: boolean
   createdAt: string
@@ -28,6 +29,7 @@ type IncomingReview = {
 }
 
 const HISTORY_KEY = 'reviewflow-history'
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 
@@ -35,16 +37,19 @@ function App() {
   const [review, setReview] = useState('')
   const [rating, setRating] = useState('3')
   const [tone, setTone] = useState<Tone>('Professional')
+  const [responseLength, setResponseLength] =
+    useState<ResponseLength>('Short')
+
   const [response, setResponse] = useState('')
   const [requiresApproval, setRequiresApproval] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [copied, setCopied] = useState(false)
+
   const [incomingReviews, setIncomingReviews] = useState<IncomingReview[]>([])
   const [isReceivingReview, setIsReceivingReview] = useState(false)
-  const [responseLength, setResponseLength] =
-  useState<ResponseLength>('Short')
+
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     try {
       const savedHistory = localStorage.getItem(HISTORY_KEY)
@@ -95,7 +100,9 @@ function App() {
       const data = await apiResponse.json()
 
       if (!apiResponse.ok) {
-        throw new Error(data.message || 'Unable to generate a response.')
+        throw new Error(
+          data.message || 'Unable to generate a response.',
+        )
       }
 
       setResponse(data.response)
@@ -106,6 +113,7 @@ function App() {
         review: review.trim(),
         rating,
         tone,
+        responseLength,
         response: data.response,
         requiresApproval: data.requiresApproval,
         createdAt: new Date().toISOString(),
@@ -137,7 +145,9 @@ function App() {
         setCopied(false)
       }, 1500)
     } catch {
-      setError('Unable to copy the response. Please copy it manually.')
+      setError(
+        'Unable to copy the response. Please copy it manually.',
+      )
     }
   }
 
@@ -149,10 +159,12 @@ function App() {
     setReview(item.review)
     setRating(item.rating)
     setTone(item.tone)
+    setResponseLength(item.responseLength || 'Short')
     setResponse(item.response)
     setRequiresApproval(item.requiresApproval)
     setError('')
     setIsEditing(false)
+    setCopied(false)
 
     window.scrollTo({
       top: 0,
@@ -160,163 +172,173 @@ function App() {
     })
   }
 
-const handleNewReview = () => {
-  setReview('')
-  setRating('3')
-  setTone('Professional')
-  setResponseLength('Short')
-  setResponse('')
-  setRequiresApproval(false)
-  setError('')
-  setIsEditing(false)
-  setCopied(false)
+  const handleNewReview = () => {
+    setReview('')
+    setRating('3')
+    setTone('Professional')
+    setResponseLength('Short')
+    setResponse('')
+    setRequiresApproval(false)
+    setError('')
+    setIsEditing(false)
+    setCopied(false)
 
-  window.scrollTo({
-    top: 0,
-    behavior: 'smooth',
-  })
-}
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    })
+  }
+
   const handleClearHistory = () => {
     setHistory([])
   }
+
   const handleSimulateIncomingReview = async () => {
-  if (isReceivingReview) return
+    if (isReceivingReview) return
 
-  const sampleReviews = [
-    {
-      customerName: 'Sarah M.',
-      platform: 'Google Reviews',
-      review:
-        'The staff was friendly and my order was ready earlier than expected.',
-      rating: '5',
-    },
-    {
-      customerName: 'Michael R.',
-      platform: 'Google Reviews',
-      review:
-        'My delivery arrived late and I could not reach anyone for an update.',
-      rating: '2',
-    },
-    {
-      customerName: 'Jennifer L.',
-      platform: 'Yelp',
-      review:
-        'The service was good, but the waiting time was longer than expected.',
-      rating: '3',
-    },
-  ]
-
-  const sample =
-    sampleReviews[Math.floor(Math.random() * sampleReviews.length)]
-
-  const automaticTone: Tone =
-    Number(sample.rating) <= 2
-      ? 'Apologetic'
-      : Number(sample.rating) >= 4
-        ? 'Friendly'
-        : 'Professional'
-
-  const incomingId = crypto.randomUUID()
-
-  const newIncomingReview: IncomingReview = {
-    id: incomingId,
-    customerName: sample.customerName,
-    platform: sample.platform,
-    review: sample.review,
-    rating: sample.rating,
-    tone: automaticTone,
-    response: '',
-    requiresApproval: false,
-    status: 'processing',
-    createdAt: new Date().toISOString(),
-  }
-
-  setIncomingReviews((current) => [newIncomingReview, ...current])
-  setIsReceivingReview(true)
-
-  try {
-    const apiResponse = await fetch(
-      `${API_BASE_URL}/api/generate-response`,
+    const sampleReviews = [
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          review: sample.review,
-          rating: sample.rating,
-          tone: automaticTone,
-        }),
+        customerName: 'Sarah M.',
+        platform: 'Google Reviews',
+        review:
+          'The staff was friendly and my order was ready earlier than expected.',
+        rating: '5',
       },
-    )
+      {
+        customerName: 'Michael R.',
+        platform: 'Google Reviews',
+        review:
+          'My delivery arrived late and I could not reach anyone for an update.',
+        rating: '2',
+      },
+      {
+        customerName: 'Jennifer L.',
+        platform: 'Yelp',
+        review:
+          'The service was good, but the waiting time was longer than expected.',
+        rating: '3',
+      },
+    ]
 
-    const data = await apiResponse.json()
+    const sample =
+      sampleReviews[Math.floor(Math.random() * sampleReviews.length)]
 
-    if (!apiResponse.ok) {
-      throw new Error(data.message || 'Unable to process incoming review.')
+    const automaticTone: Tone =
+      Number(sample.rating) <= 2
+        ? 'Apologetic'
+        : Number(sample.rating) >= 4
+          ? 'Friendly'
+          : 'Professional'
+
+    const incomingId = crypto.randomUUID()
+
+    const newIncomingReview: IncomingReview = {
+      id: incomingId,
+      customerName: sample.customerName,
+      platform: sample.platform,
+      review: sample.review,
+      rating: sample.rating,
+      tone: automaticTone,
+      response: '',
+      requiresApproval: false,
+      status: 'processing',
+      createdAt: new Date().toISOString(),
     }
 
-    setIncomingReviews((current) =>
-      current.map((item) =>
-        item.id === incomingId
-          ? {
-              ...item,
-              response: data.response,
-              requiresApproval: data.requiresApproval,
-              status: 'ready',
-            }
-          : item,
-      ),
-    )
-  } catch {
-    setIncomingReviews((current) =>
-      current.map((item) =>
-        item.id === incomingId
-          ? {
-              ...item,
-              status: 'error',
-            }
-          : item,
-      ),
-    )
-  } finally {
-    setIsReceivingReview(false)
+    setIncomingReviews((current) => [
+      newIncomingReview,
+      ...current,
+    ])
+
+    setIsReceivingReview(true)
+
+    try {
+      const apiResponse = await fetch(
+        `${API_BASE_URL}/api/generate-response`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            review: sample.review,
+            rating: sample.rating,
+            tone: automaticTone,
+            responseLength: 'Short',
+          }),
+        },
+      )
+
+      const data = await apiResponse.json()
+
+      if (!apiResponse.ok) {
+        throw new Error(
+          data.message || 'Unable to process incoming review.',
+        )
+      }
+
+      setIncomingReviews((current) =>
+        current.map((item) =>
+          item.id === incomingId
+            ? {
+                ...item,
+                response: data.response,
+                requiresApproval: data.requiresApproval,
+                status: 'ready',
+              }
+            : item,
+        ),
+      )
+    } catch {
+      setIncomingReviews((current) =>
+        current.map((item) =>
+          item.id === incomingId
+            ? {
+                ...item,
+                status: 'error',
+              }
+            : item,
+        ),
+      )
+    } finally {
+      setIsReceivingReview(false)
+    }
   }
-}
+
   return (
     <main className="app-shell">
       <section className="hero">
-        <span className="eyebrow">AI Review Response Manager</span>
+        <span className="eyebrow">
+          AI Review Response Manager
+        </span>
 
-        <h1>Turn customer reviews into thoughtful responses.</h1>
+        <h1>
+          Generate the right response to every customer review.
+        </h1>
 
         <p>
-          ReviewFlow helps businesses prepare clear, professional replies while
-          flagging sensitive feedback for manager approval.
+          Paste a review, choose the rating, tone, and response
+          length, then generate a professional reply.
         </p>
       </section>
 
       <section className="workspace">
-        <form className="review-form" onSubmit={handleSubmit}>
+        <form
+          className="review-form"
+          onSubmit={handleSubmit}
+        >
           <div className="form-group">
-            <label htmlFor="review">Customer review</label>
-            <select
-    id="responseLength"
-    value={responseLength}
-    onChange={(event) =>
-      setResponseLength(event.target.value as ResponseLength)
-    }
-    disabled={isLoading}
-  >
-    <option>Short</option>
-    <option>Medium</option>
-    <option>Long</option>
-  </select>
+            <label htmlFor="review">
+              Customer review
+            </label>
+
             <textarea
               id="review"
               value={review}
-              onChange={(event) => setReview(event.target.value)}
-              placeholder="Paste the customer review here..."
+              onChange={(event) =>
+                setReview(event.target.value)
+              }
+              placeholder="Example: The staff was friendly, but my order arrived 20 minutes late."
               rows={7}
               disabled={isLoading}
             />
@@ -324,12 +346,16 @@ const handleNewReview = () => {
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="rating">Star rating</label>
+              <label htmlFor="rating">
+                Star rating
+              </label>
 
               <select
                 id="rating"
                 value={rating}
-                onChange={(event) => setRating(event.target.value)}
+                onChange={(event) =>
+                  setRating(event.target.value)
+                }
                 disabled={isLoading}
               >
                 <option value="1">1 star</option>
@@ -341,12 +367,16 @@ const handleNewReview = () => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="tone">Response tone</label>
+              <label htmlFor="tone">
+                Response tone
+              </label>
 
               <select
                 id="tone"
                 value={tone}
-                onChange={(event) => setTone(event.target.value as Tone)}
+                onChange={(event) =>
+                  setTone(event.target.value as Tone)
+                }
                 disabled={isLoading}
               >
                 <option>Professional</option>
@@ -355,33 +385,71 @@ const handleNewReview = () => {
                 <option>Concise</option>
               </select>
             </div>
+
+            <div className="form-group">
+              <label htmlFor="responseLength">
+                Response length
+              </label>
+
+              <select
+                id="responseLength"
+                value={responseLength}
+                onChange={(event) =>
+                  setResponseLength(
+                    event.target.value as ResponseLength,
+                  )
+                }
+                disabled={isLoading}
+              >
+                <option>Short</option>
+                <option>Medium</option>
+                <option>Long</option>
+              </select>
+            </div>
           </div>
 
-          {error && <p className="error-message">{error}</p>}
-          <div className="form-actions">
-  <button
-    type="button"
-    className="secondary-button"
-    onClick={handleNewReview}
-    disabled={isLoading}
-  >
-    New review
-  </button>
+          {error && (
+            <p className="error-message">
+              {error}
+            </p>
+          )}
 
-  <button type="submit" disabled={isLoading}>
-    {isLoading ? 'Generating response...' : 'Generate response'}
-  </button>
-</div>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={handleNewReview}
+              disabled={isLoading}
+            >
+              New review
+            </button>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+            >
+              {isLoading
+                ? 'Generating response...'
+                : 'Generate AI response'}
+            </button>
+          </div>
         </form>
 
         <aside className="response-panel">
-          <span className="panel-label">Generated response</span>
+          <span className="panel-label">
+            Generated response
+          </span>
 
           {isLoading && (
             <div className="loading-state">
               <div className="spinner" />
+
               <h2>Creating your response</h2>
-              <p>ReviewFlow is preparing a reply based on the selected tone.</p>
+
+              <p>
+                ReviewFlow is creating a reply using your selected
+                settings.
+              </p>
             </div>
           )}
 
@@ -403,7 +471,9 @@ const handleNewReview = () => {
                 <textarea
                   className="response-editor"
                   value={response}
-                  onChange={(event) => setResponse(event.target.value)}
+                  onChange={(event) =>
+                    setResponse(event.target.value)
+                  }
                   rows={8}
                 />
               ) : (
@@ -413,12 +483,19 @@ const handleNewReview = () => {
               <div className="response-actions">
                 <button
                   type="button"
-                  onClick={() => setIsEditing(!isEditing)}
+                  onClick={() =>
+                    setIsEditing(!isEditing)
+                  }
                 >
-                  {isEditing ? 'Save changes' : 'Edit'}
+                  {isEditing
+                    ? 'Save changes'
+                    : 'Edit'}
                 </button>
 
-                <button type="button" onClick={handleCopy}>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                >
                   {copied ? 'Copied' : 'Copy'}
                 </button>
 
@@ -437,10 +514,13 @@ const handleNewReview = () => {
 
           {!isLoading && !response && (
             <div className="empty-state">
-              <h2>Your AI response will appear here</h2>
+              <h2>
+                Your generated reply will appear here
+              </h2>
 
               <p>
-                Add a review, select the rating and tone, then generate a reply.
+                Complete the form and click Generate AI
+                response.
               </p>
             </div>
           )}
@@ -450,7 +530,10 @@ const handleNewReview = () => {
       <section className="history-section">
         <div className="history-header">
           <div>
-            <span className="eyebrow">Saved locally</span>
+            <span className="eyebrow">
+              Saved locally
+            </span>
+
             <h2>Review history</h2>
           </div>
 
@@ -467,12 +550,17 @@ const handleNewReview = () => {
 
         {history.length === 0 ? (
           <div className="history-empty">
-            <p>Your generated responses will appear here.</p>
+            <p>
+              Your generated responses will appear here.
+            </p>
           </div>
         ) : (
           <div className="history-list">
             {history.map((item) => (
-              <article className="history-card" key={item.id}>
+              <article
+                className="history-card"
+                key={item.id}
+              >
                 <div className="history-card-top">
                   <span
                     className={
@@ -487,23 +575,32 @@ const handleNewReview = () => {
                   </span>
 
                   <span className="history-date">
-                    {new Date(item.createdAt).toLocaleString()}
+                    {new Date(
+                      item.createdAt,
+                    ).toLocaleString()}
                   </span>
                 </div>
 
                 <h3>{item.review}</h3>
 
-                <p className="history-response">{item.response}</p>
+                <p className="history-response">
+                  {item.response}
+                </p>
 
                 <div className="history-meta">
                   <span>{item.rating} stars</span>
                   <span>{item.tone}</span>
+                  <span>
+                    {item.responseLength || 'Short'}
+                  </span>
                 </div>
 
                 <button
                   type="button"
                   className="load-history-button"
-                  onClick={() => handleLoadHistory(item)}
+                  onClick={() =>
+                    handleLoadHistory(item)
+                  }
                 >
                   Open response
                 </button>
@@ -512,97 +609,130 @@ const handleNewReview = () => {
           </div>
         )}
       </section>
+
       <section className="incoming-section">
-  <div className="incoming-header">
-    <div>
-      <span className="eyebrow">Automation demo</span>
-      <h2>Incoming reviews</h2>
-      <p>
-        Simulate a review arriving from an online platform and automatically
-        generate a suitable response.
-      </p>
-    </div>
-
-    <button
-      type="button"
-      className="simulate-button"
-      onClick={handleSimulateIncomingReview}
-      disabled={isReceivingReview}
-    >
-      {isReceivingReview ? 'Processing review...' : 'Simulate new review'}
-    </button>
-  </div>
-
-  {incomingReviews.length === 0 ? (
-    <div className="incoming-empty">
-      <h3>No incoming reviews yet</h3>
-      <p>Use the simulation button to demonstrate the automated workflow.</p>
-    </div>
-  ) : (
-    <div className="incoming-list">
-      {incomingReviews.map((item) => (
-        <article className="incoming-card" key={item.id}>
-          <div className="incoming-card-top">
-            <div>
-              <h3>{item.customerName}</h3>
-              <span>{item.platform}</span>
-            </div>
-
-            <span
-  className={
-    item.status === 'processing'
-      ? 'incoming-status incoming-processing'
-      : item.status === 'error'
-        ? 'incoming-status incoming-error-status'
-        : item.requiresApproval
-          ? 'incoming-status incoming-review'
-          : 'incoming-status incoming-ready'
-  }
->
-              {item.status === 'processing' && 'Generating response'}
-              {item.status === 'error' && 'Generation failed'}
-              {item.status === 'ready' &&
-                (item.requiresApproval
-                  ? 'Manager review required'
-                  : 'Auto-approved')}
+        <div className="incoming-header">
+          <div>
+            <span className="eyebrow">
+              Automation demo
             </span>
+
+            <h2>Incoming reviews</h2>
+
+            <p>
+              Simulate a review arriving from an online
+              platform and automatically generate a suitable
+              response.
+            </p>
           </div>
 
-          <div className="incoming-meta">
-            <span>{item.rating} stars</span>
-            <span>{item.tone} tone</span>
-            <span>{new Date(item.createdAt).toLocaleString()}</span>
+          <button
+            type="button"
+            className="simulate-button"
+            onClick={handleSimulateIncomingReview}
+            disabled={isReceivingReview}
+          >
+            {isReceivingReview
+              ? 'Processing review...'
+              : 'Simulate new review'}
+          </button>
+        </div>
+
+        {incomingReviews.length === 0 ? (
+          <div className="incoming-empty">
+            <h3>No incoming reviews yet</h3>
+
+            <p>
+              Use the simulation button to demonstrate the
+              automated workflow.
+            </p>
           </div>
+        ) : (
+          <div className="incoming-list">
+            {incomingReviews.map((item) => (
+              <article
+                className="incoming-card"
+                key={item.id}
+              >
+                <div className="incoming-card-top">
+                  <div>
+                    <h3>{item.customerName}</h3>
+                    <span>{item.platform}</span>
+                  </div>
 
-          <div className="incoming-content">
-            <div>
-              <span className="content-label">Customer review</span>
-              <p>{item.review}</p>
-            </div>
+                  <span
+                    className={
+                      item.status === 'processing'
+                        ? 'incoming-status incoming-processing'
+                        : item.status === 'error'
+                          ? 'incoming-status incoming-error-status'
+                          : item.requiresApproval
+                            ? 'incoming-status incoming-review'
+                            : 'incoming-status incoming-ready'
+                    }
+                  >
+                    {item.status === 'processing' &&
+                      'Generating response'}
 
-            <div>
-              <span className="content-label">Generated response</span>
+                    {item.status === 'error' &&
+                      'Generation failed'}
 
-              {item.status === 'processing' && (
-                <p className="muted-text">
-                  Gemini is preparing an appropriate reply...
-                </p>
-              )}
+                    {item.status === 'ready' &&
+                      (item.requiresApproval
+                        ? 'Manager review required'
+                        : 'Auto-approved')}
+                  </span>
+                </div>
 
-              {item.status === 'error' && (
-                <p className="incoming-error">
-                  The response could not be generated. Please try again.
-                </p>
-              )}
+                <div className="incoming-meta">
+                  <span>{item.rating} stars</span>
+                  <span>{item.tone} tone</span>
 
-              {item.status === 'ready' && <p>{item.response}</p>}
-            </div>
+                  <span>
+                    {new Date(
+                      item.createdAt,
+                    ).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="incoming-content">
+                  <div>
+                    <span className="content-label">
+                      Customer review
+                    </span>
+
+                    <p>{item.review}</p>
+                  </div>
+
+                  <div>
+                    <span className="content-label">
+                      Generated response
+                    </span>
+
+                    {item.status === 'processing' && (
+                      <p className="muted-text">
+                        Gemini is preparing an appropriate
+                        reply...
+                      </p>
+                    )}
+
+                    {item.status === 'error' && (
+                      <p className="incoming-error">
+                        The response could not be generated.
+                        Please try again.
+                      </p>
+                    )}
+
+                    {item.status === 'ready' && (
+                      <p>{item.response}</p>
+                    )}
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
-        </article>
-      ))}
-    </div>
-  )}
-</section>
+        )}
+      </section>
     </main>
   )
 }
