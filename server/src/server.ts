@@ -99,6 +99,7 @@ Requirements:
 - Return only valid JSON with no markdown or extra text.
 - Do not claim that the business has already taken action, is investigating, or will provide a specific resolution unless that information was provided.
 - Avoid promising future action; acknowledge the issue without claiming that improvements are already underway.
+- Do not promise or imply that the customer’s future experience will be improved.
 `
 
       const result = await ai.models.generateContent({
