@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 
 type Tone = 'Professional' | 'Friendly' | 'Apologetic' | 'Concise'
+type ResponseLength = 'Short' | 'Medium' | 'Long'
 
 type HistoryItem = {
   id: string
@@ -42,7 +43,8 @@ function App() {
   const [copied, setCopied] = useState(false)
   const [incomingReviews, setIncomingReviews] = useState<IncomingReview[]>([])
   const [isReceivingReview, setIsReceivingReview] = useState(false)
-
+  const [responseLength, setResponseLength] =
+  useState<ResponseLength>('Short')
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     try {
       const savedHistory = localStorage.getItem(HISTORY_KEY)
@@ -85,6 +87,7 @@ function App() {
             review,
             rating,
             tone,
+            responseLength,
           }),
         },
       )
@@ -161,6 +164,7 @@ const handleNewReview = () => {
   setReview('')
   setRating('3')
   setTone('Professional')
+  setResponseLength('Short')
   setResponse('')
   setRequiresApproval(false)
   setError('')
@@ -296,7 +300,18 @@ const handleNewReview = () => {
         <form className="review-form" onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="review">Customer review</label>
-
+            <select
+    id="responseLength"
+    value={responseLength}
+    onChange={(event) =>
+      setResponseLength(event.target.value as ResponseLength)
+    }
+    disabled={isLoading}
+  >
+    <option>Short</option>
+    <option>Medium</option>
+    <option>Long</option>
+  </select>
             <textarea
               id="review"
               value={review}

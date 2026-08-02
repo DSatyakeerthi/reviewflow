@@ -48,8 +48,15 @@ app.get('/api/health', (_request: Request, response: Response) => {
 app.post(
   '/api/generate-response',
   async (request: Request, response: Response) => {
-    const { review, rating, tone } = request.body
+    const { review, rating, tone, responseLength } = request.body
+    const lengthInstructions: Record<string, string> = {
+    Short: 'Write 20 to 35 words in one short paragraph, about two lines.',
+    Medium: 'Write 40 to 65 words in one paragraph.',
+    Long: 'Write 70 to 100 words in one or two short paragraphs.',
+  }
 
+  const selectedLength =
+    lengthInstructions[responseLength] ?? lengthInstructions.Short
     if (typeof review !== 'string' || !review.trim()) {
       response.status(400).json({
         success: false,
@@ -76,6 +83,9 @@ Customer review:
 Star rating: ${rating} out of 5
 Requested response tone: ${tone}
 
+Selected response length: ${responseLength || 'Short'}
+Length requirement: ${selectedLength}
+
 Return valid JSON using this exact structure:
 
 {
@@ -88,7 +98,7 @@ Requirements:
 - Refer naturally to the customer's actual concern.
 - Do not assume the business type, location, product, or service unless the review clearly states it.
 - Do not blame the customer.
-- Keep the response between 40 and 90 words.
+- Follow this response length requirement: ${selectedLength}
 - Set requiresApproval to true when the review includes serious dissatisfaction, service failure, safety concerns, legal concerns, billing disputes, threats, discrimination, or other sensitive issues.
 - Consider both the written review and the star rating.
 - Return only valid JSON with no markdown or extra text.
