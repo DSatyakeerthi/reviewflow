@@ -1,7 +1,7 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express, { type Request, type Response } from 'express'
-import { GoogleGenAI, ThinkingLevel } from '@google/genai'
+import { GoogleGenAI } from '@google/genai'
 
 dotenv.config()
 
@@ -98,14 +98,24 @@ Requirements:
 `
 
       const result = await ai.models.generateContent({
-  model: 'gemini-3.6-flash',
+  model: 'gemini-3.5-flash-lite',
   contents: prompt,
   config: {
-    thinkingConfig: {
-      thinkingLevel: ThinkingLevel.LOW,
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'object',
+      properties: {
+        response: {
+          type: 'string',
+        },
+        requiresApproval: {
+          type: 'boolean',
+        },
+      },
+      required: ['response', 'requiresApproval'],
     },
-    maxOutputTokens: 180,
-    temperature: 0.4,
+    maxOutputTokens: 400,
+    temperature: 0.3,
   },
 })
 
@@ -114,13 +124,7 @@ Requirements:
 if (!rawText) {
   throw new Error('Gemini returned an empty response.')
 }
-
-const cleanedText = rawText
-  .replace(/^```json\s*/i, '')
-  .replace(/^```\s*/i, '')
-  .replace(/\s*```$/i, '')
-
-const parsedResult = JSON.parse(cleanedText)
+const parsedResult = JSON.parse(rawText)
 
 if (
   typeof parsedResult.response !== 'string' ||
