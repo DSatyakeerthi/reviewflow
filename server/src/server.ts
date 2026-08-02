@@ -1,7 +1,7 @@
 import cors from 'cors'
 import dotenv from 'dotenv'
 import express, { type Request, type Response } from 'express'
-import { GoogleGenAI } from '@google/genai'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 
 dotenv.config()
 
@@ -107,7 +107,7 @@ Requirements:
   contents: prompt,
   config: {
     thinkingConfig: {
-      thinkingLevel: 'low',
+      thinkingLevel: ThinkingLevel.LOW,
     },
     maxOutputTokens: 180,
     temperature: 0.4,
