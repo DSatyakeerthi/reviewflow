@@ -98,6 +98,7 @@ Requirements:
 - Consider both the written review and the star rating.
 - Return only valid JSON with no markdown or extra text.
 - Do not claim that the business has already taken action, is investigating, or will provide a specific resolution unless that information was provided.
+- Avoid promising future action; acknowledge the issue without claiming that improvements are already underway.
 `
 
       const result = await ai.models.generateContent({
