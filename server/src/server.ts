@@ -103,9 +103,16 @@ Requirements:
 `
 
       const result = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: prompt,
-      })
+  model: 'gemini-3.6-flash',
+  contents: prompt,
+  config: {
+    thinkingConfig: {
+      thinkingLevel: 'low',
+    },
+    maxOutputTokens: 180,
+    temperature: 0.4,
+  },
+})
 
       const rawText = result.text?.trim()
 
