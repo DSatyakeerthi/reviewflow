@@ -17,11 +17,6 @@ const ai = new GoogleGenAI({
   apiKey,
 })
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  process.env.CLIENT_URL,
-].filter((origin): origin is string => Boolean(origin))
-
 app.use(
   cors({
     origin(origin, callback) {
