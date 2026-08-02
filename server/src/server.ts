@@ -126,6 +126,10 @@ response.status(200).json({
   },
 )
 
-app.listen(port, () => {
-  console.log(`ReviewFlow server running at http://localhost:${port}`)
-})
+if (process.env.VERCEL !== '1') {
+  app.listen(port, () => {
+    console.log(`ReviewFlow server running at http://localhost:${port}`)
+  })
+}
+
+export default app
