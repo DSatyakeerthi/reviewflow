@@ -48,10 +48,10 @@ select {
 
 .hero h1 {
   margin: 0;
-  max-width: 900px;
-  font-size: clamp(2.3rem, 5vw, 4.2rem);
-  line-height: 1.05;
-  letter-spacing: -0.05em;
+  max-width: 850px;
+  font-size: clamp(2.4rem, 5vw, 4rem);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
 }
 
 .hero p {
