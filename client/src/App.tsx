@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 
 type Tone = 'Professional' | 'Friendly' | 'Apologetic' | 'Concise'
@@ -28,6 +28,24 @@ type IncomingReview = {
   createdAt: string
 }
 
+type BusinessReview = {
+  id: string
+  customerName: string
+  rating: number
+  message: string
+  businessReply: string | null
+  createdAt: string
+}
+
+type BusinessReplyDraft = {
+  response: string
+  requiresApproval: boolean
+  isGenerating: boolean
+  isPublishing: boolean
+  isEditing: boolean
+  error: string
+}
+
 const HISTORY_KEY = 'reviewflow-history'
 
 const API_BASE_URL =
@@ -50,6 +68,13 @@ function App() {
   const [incomingReviews, setIncomingReviews] = useState<IncomingReview[]>([])
   const [isReceivingReview, setIsReceivingReview] = useState(false)
 
+  const [businessReviews, setBusinessReviews] = useState<BusinessReview[]>([])
+  const [businessReplyDrafts, setBusinessReplyDrafts] =
+  useState<Record<string, BusinessReplyDraft>>({})
+  const [isLoadingBusinessReviews, setIsLoadingBusinessReviews] =
+    useState(true)
+  const [businessReviewError, setBusinessReviewError] = useState('')
+
   const [history, setHistory] = useState<HistoryItem[]>(() => {
     try {
       const savedHistory = localStorage.getItem(HISTORY_KEY)
@@ -63,6 +88,176 @@ function App() {
   useEffect(() => {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
   }, [history])
+
+  const loadBusinessReviews = useCallback(async () => {
+    setIsLoadingBusinessReviews(true)
+    setBusinessReviewError('')
+
+    try {
+      const apiResponse = await fetch(`${API_BASE_URL}/api/reviews`)
+      const data = await apiResponse.json()
+
+      if (!apiResponse.ok) {
+        throw new Error(
+          data.message || 'Unable to load business reviews.',
+        )
+      }
+
+      setBusinessReviews(data.reviews)
+    } catch (error) {
+      setBusinessReviewError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to load business reviews.',
+      )
+    } finally {
+      setIsLoadingBusinessReviews(false)
+    }
+  }, [])
+
+  const handleGenerateBusinessReply = async (
+  item: BusinessReview,
+) => {
+  const automaticTone: Tone =
+    item.rating <= 2
+      ? 'Apologetic'
+      : item.rating >= 4
+        ? 'Friendly'
+        : 'Professional'
+
+  setBusinessReplyDrafts((current) => ({
+    ...current,
+    [item.id]: {
+      response: '',
+      requiresApproval: false,
+      isGenerating: true,
+      isPublishing: false,
+      isEditing: false,
+      error: '',
+    },
+  }))
+
+  try {
+    const apiResponse = await fetch(
+      `${API_BASE_URL}/api/generate-response`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          review: item.message,
+          rating: item.rating,
+          tone: automaticTone,
+          responseLength: 'Short',
+        }),
+      },
+    )
+
+    const data = await apiResponse.json()
+
+    if (!apiResponse.ok) {
+      throw new Error(
+        data.message || 'Unable to generate a response.',
+      )
+    }
+
+    setBusinessReplyDrafts((current) => ({
+      ...current,
+      [item.id]: {
+        response: data.response,
+        requiresApproval: data.requiresApproval,
+        isGenerating: false,
+        isPublishing: false,
+        isEditing: false,
+        error: '',
+      },
+    }))
+  } catch (error) {
+    setBusinessReplyDrafts((current) => ({
+      ...current,
+      [item.id]: {
+        response: '',
+        requiresApproval: false,
+        isGenerating: false,
+        isPublishing: false,
+        isEditing: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to generate a response.',
+      },
+    }))
+  }
+}
+
+const handlePublishBusinessReply = async (
+  reviewId: string,
+) => {
+  const draft = businessReplyDrafts[reviewId]
+
+  if (!draft?.response.trim()) return
+
+  setBusinessReplyDrafts((current) => ({
+    ...current,
+    [reviewId]: {
+      ...current[reviewId],
+      isPublishing: true,
+      error: '',
+    },
+  }))
+
+  try {
+    const apiResponse = await fetch(
+      `${API_BASE_URL}/api/reviews/${reviewId}/reply`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          businessReply: draft.response,
+        }),
+      },
+    )
+
+    const data = await apiResponse.json()
+
+    if (!apiResponse.ok) {
+      throw new Error(
+        data.message || 'Unable to publish the reply.',
+      )
+    }
+
+    setBusinessReviews((current) =>
+      current.map((item) =>
+        item.id === reviewId ? data.review : item,
+      ),
+    )
+
+    setBusinessReplyDrafts((current) => {
+      const updatedDrafts = { ...current }
+      delete updatedDrafts[reviewId]
+      return updatedDrafts
+    })
+  } catch (error) {
+    setBusinessReplyDrafts((current) => ({
+      ...current,
+      [reviewId]: {
+        ...current[reviewId],
+        isPublishing: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unable to publish the reply.',
+      },
+    }))
+  }
+}
+
+  useEffect(() => {
+    loadBusinessReviews()
+  }, [loadBusinessReviews])
 
   const handleSubmit = async (
     event: React.FormEvent<HTMLFormElement>,
@@ -308,9 +503,7 @@ function App() {
   return (
     <main className="app-shell">
       <section className="hero">
-        <span className="eyebrow">
-          AI Review Response Manager
-        </span>
+        <span className="eyebrow">AI Review Response Manager</span>
 
         <h1>
           Generate the right response to every customer review.
@@ -323,21 +516,14 @@ function App() {
       </section>
 
       <section className="workspace">
-        <form
-          className="review-form"
-          onSubmit={handleSubmit}
-        >
+        <form className="review-form" onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="review">
-              Customer review
-            </label>
+            <label htmlFor="review">Customer review</label>
 
             <textarea
               id="review"
               value={review}
-              onChange={(event) =>
-                setReview(event.target.value)
-              }
+              onChange={(event) => setReview(event.target.value)}
               placeholder="Example: The staff was friendly, but my order arrived 20 minutes late."
               rows={7}
               disabled={isLoading}
@@ -346,16 +532,12 @@ function App() {
 
           <div className="form-row">
             <div className="form-group">
-              <label htmlFor="rating">
-                Star rating
-              </label>
+              <label htmlFor="rating">Star rating</label>
 
               <select
                 id="rating"
                 value={rating}
-                onChange={(event) =>
-                  setRating(event.target.value)
-                }
+                onChange={(event) => setRating(event.target.value)}
                 disabled={isLoading}
               >
                 <option value="1">1 star</option>
@@ -367,9 +549,7 @@ function App() {
             </div>
 
             <div className="form-group">
-              <label htmlFor="tone">
-                Response tone
-              </label>
+              <label htmlFor="tone">Response tone</label>
 
               <select
                 id="tone"
@@ -408,11 +588,7 @@ function App() {
             </div>
           </div>
 
-          {error && (
-            <p className="error-message">
-              {error}
-            </p>
-          )}
+          {error && <p className="error-message">{error}</p>}
 
           <div className="form-actions">
             <button
@@ -424,10 +600,7 @@ function App() {
               New review
             </button>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-            >
+            <button type="submit" disabled={isLoading}>
               {isLoading
                 ? 'Generating response...'
                 : 'Generate AI response'}
@@ -436,9 +609,7 @@ function App() {
         </form>
 
         <aside className="response-panel">
-          <span className="panel-label">
-            Generated response
-          </span>
+          <span className="panel-label">Generated response</span>
 
           {isLoading && (
             <div className="loading-state">
@@ -483,19 +654,12 @@ function App() {
               <div className="response-actions">
                 <button
                   type="button"
-                  onClick={() =>
-                    setIsEditing(!isEditing)
-                  }
+                  onClick={() => setIsEditing(!isEditing)}
                 >
-                  {isEditing
-                    ? 'Save changes'
-                    : 'Edit'}
+                  {isEditing ? 'Save changes' : 'Edit'}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                >
+                <button type="button" onClick={handleCopy}>
                   {copied ? 'Copied' : 'Copy'}
                 </button>
 
@@ -514,13 +678,10 @@ function App() {
 
           {!isLoading && !response && (
             <div className="empty-state">
-              <h2>
-                Your generated reply will appear here
-              </h2>
+              <h2>Your generated reply will appear here</h2>
 
               <p>
-                Complete the form and click Generate AI
-                response.
+                Complete the form and click Generate AI response.
               </p>
             </div>
           )}
@@ -530,10 +691,7 @@ function App() {
       <section className="history-section">
         <div className="history-header">
           <div>
-            <span className="eyebrow">
-              Saved locally
-            </span>
-
+            <span className="eyebrow">Saved locally</span>
             <h2>Review history</h2>
           </div>
 
@@ -550,17 +708,12 @@ function App() {
 
         {history.length === 0 ? (
           <div className="history-empty">
-            <p>
-              Your generated responses will appear here.
-            </p>
+            <p>Your generated responses will appear here.</p>
           </div>
         ) : (
           <div className="history-list">
             {history.map((item) => (
-              <article
-                className="history-card"
-                key={item.id}
-              >
+              <article className="history-card" key={item.id}>
                 <div className="history-card-top">
                   <span
                     className={
@@ -575,9 +728,7 @@ function App() {
                   </span>
 
                   <span className="history-date">
-                    {new Date(
-                      item.createdAt,
-                    ).toLocaleString()}
+                    {new Date(item.createdAt).toLocaleString()}
                   </span>
                 </div>
 
@@ -590,17 +741,13 @@ function App() {
                 <div className="history-meta">
                   <span>{item.rating} stars</span>
                   <span>{item.tone}</span>
-                  <span>
-                    {item.responseLength || 'Short'}
-                  </span>
+                  <span>{item.responseLength || 'Short'}</span>
                 </div>
 
                 <button
                   type="button"
                   className="load-history-button"
-                  onClick={() =>
-                    handleLoadHistory(item)
-                  }
+                  onClick={() => handleLoadHistory(item)}
                 >
                   Open response
                 </button>
@@ -614,15 +761,212 @@ function App() {
         <div className="incoming-header">
           <div>
             <span className="eyebrow">
-              Automation demo
+              Connected business app
             </span>
+
+            <h2>Real customer reviews</h2>
+
+            <p>
+              Reviews submitted from BrightPath Services appear
+              here.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="simulate-button"
+            onClick={loadBusinessReviews}
+            disabled={isLoadingBusinessReviews}
+          >
+            {isLoadingBusinessReviews
+              ? 'Loading reviews...'
+              : 'Refresh reviews'}
+          </button>
+        </div>
+
+        {businessReviewError && (
+          <p className="error-message">
+            {businessReviewError}
+          </p>
+        )}
+
+        {isLoadingBusinessReviews ? (
+          <div className="incoming-empty">
+            <h3>Loading customer reviews</h3>
+
+            <p>
+              Please wait while ReviewFlow checks the business
+              app.
+            </p>
+          </div>
+        ) : businessReviews.length === 0 ? (
+          <div className="incoming-empty">
+            <h3>No customer reviews yet</h3>
+
+            <p>
+              Submit a review from the BrightPath Services demo
+              app.
+            </p>
+          </div>
+        ) : (
+          <div className="incoming-list">
+            {businessReviews.map((item) => (
+              <article className="incoming-card" key={item.id}>
+                <div className="incoming-card-top">
+                  <div>
+                    <h3>{item.customerName}</h3>
+                    <span>BrightPath Services</span>
+                  </div>
+
+                  <span
+                    className={
+                      item.businessReply
+                        ? 'incoming-status incoming-ready'
+                        : 'incoming-status incoming-review'
+                    }
+                  >
+                    {item.businessReply
+                      ? 'Reply published'
+                      : 'Needs response'}
+                  </span>
+                </div>
+
+                <div className="incoming-meta">
+                  <span>{item.rating} stars</span>
+
+                  <span>
+                    {new Date(item.createdAt).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="incoming-content">
+                  <div>
+                    <span className="content-label">
+                      Customer review
+                    </span>
+
+                    <p>{item.message}</p>
+                  </div>
+
+                  <div>
+  <span className="content-label">
+    Business response
+  </span>
+
+  {item.businessReply ? (
+    <p>{item.businessReply}</p>
+  ) : businessReplyDrafts[item.id]?.isGenerating ? (
+    <p className="muted-text">
+      Gemini is generating a response...
+    </p>
+  ) : businessReplyDrafts[item.id]?.response ? (
+    <div>
+      {businessReplyDrafts[item.id].requiresApproval && (
+        <span className="status-badge status-review">
+          Manager review required
+        </span>
+      )}
+
+      {businessReplyDrafts[item.id].isEditing ? (
+        <textarea
+          className="response-editor"
+          value={businessReplyDrafts[item.id].response}
+          onChange={(event) =>
+            setBusinessReplyDrafts((current) => ({
+              ...current,
+              [item.id]: {
+                ...current[item.id],
+                response: event.target.value,
+              },
+            }))
+          }
+          rows={5}
+        />
+      ) : (
+        <p>{businessReplyDrafts[item.id].response}</p>
+      )}
+
+      {businessReplyDrafts[item.id].error && (
+        <p className="error-message">
+          {businessReplyDrafts[item.id].error}
+        </p>
+      )}
+
+      <div className="response-actions">
+        <button
+          type="button"
+          onClick={() =>
+            setBusinessReplyDrafts((current) => ({
+              ...current,
+              [item.id]: {
+                ...current[item.id],
+                isEditing: !current[item.id].isEditing,
+              },
+            }))
+          }
+        >
+          {businessReplyDrafts[item.id].isEditing
+            ? 'Save changes'
+            : 'Edit'}
+        </button>
+
+        <button
+          type="button"
+          className="approve-button"
+          onClick={() =>
+            handlePublishBusinessReply(item.id)
+          }
+          disabled={
+            businessReplyDrafts[item.id].isPublishing
+          }
+        >
+          {businessReplyDrafts[item.id].isPublishing
+            ? 'Publishing...'
+            : 'Publish reply'}
+        </button>
+      </div>
+    </div>
+  ) : (
+    <div>
+      <p className="muted-text">
+        No response has been published yet.
+      </p>
+
+      {businessReplyDrafts[item.id]?.error && (
+        <p className="error-message">
+          {businessReplyDrafts[item.id].error}
+        </p>
+      )}
+
+      <button
+        type="button"
+        className="simulate-button"
+        onClick={() =>
+          handleGenerateBusinessReply(item)
+        }
+      >
+        Generate AI response
+      </button>
+    </div>
+  )}
+</div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="incoming-section">
+        <div className="incoming-header">
+          <div>
+            <span className="eyebrow">Automation demo</span>
 
             <h2>Incoming reviews</h2>
 
             <p>
-              Simulate a review arriving from an online
-              platform and automatically generate a suitable
-              response.
+              Simulate a review arriving from an online platform
+              and automatically generate a suitable response.
             </p>
           </div>
 
@@ -650,10 +994,7 @@ function App() {
         ) : (
           <div className="incoming-list">
             {incomingReviews.map((item) => (
-              <article
-                className="incoming-card"
-                key={item.id}
-              >
+              <article className="incoming-card" key={item.id}>
                 <div className="incoming-card-top">
                   <div>
                     <h3>{item.customerName}</h3>
@@ -689,9 +1030,7 @@ function App() {
                   <span>{item.tone} tone</span>
 
                   <span>
-                    {new Date(
-                      item.createdAt,
-                    ).toLocaleString()}
+                    {new Date(item.createdAt).toLocaleString()}
                   </span>
                 </div>
 
