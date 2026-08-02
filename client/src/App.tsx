@@ -27,6 +27,8 @@ type IncomingReview = {
 }
 
 const HISTORY_KEY = 'reviewflow-history'
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
 
 function App() {
   const [review, setReview] = useState('')
@@ -73,7 +75,7 @@ function App() {
 
     try {
       const apiResponse = await fetch(
-        'http://localhost:3001/api/generate-response',
+        `${API_BASE_URL}/api/generate-response`,
         {
           method: 'POST',
           headers: {
@@ -230,7 +232,7 @@ const handleNewReview = () => {
 
   try {
     const apiResponse = await fetch(
-      'http://localhost:3001/api/generate-response',
+      `${API_BASE_URL}/api/generate-response`,
       {
         method: 'POST',
         headers: {
