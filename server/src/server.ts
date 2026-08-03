@@ -2,8 +2,18 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import express, { type Request, type Response } from 'express'
 import { GoogleGenAI } from '@google/genai'
+import { createClient } from '@supabase/supabase-js'
 
 dotenv.config()
+
+type ReviewRow = {
+  id: string
+  customer_name: string
+  rating: number
+  message: string
+  business_reply: string | null
+  created_at: string
+}
 
 type Review = {
   id: string
@@ -16,37 +26,52 @@ type Review = {
 
 const app = express()
 const port = process.env.PORT || 3001
-const apiKey = process.env.GEMINI_API_KEY
 
-if (!apiKey) {
-  throw new Error('GEMINI_API_KEY is missing from the server .env file.')
+const geminiApiKey = process.env.GEMINI_API_KEY
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY
+
+if (!geminiApiKey) {
+  throw new Error(
+    'GEMINI_API_KEY is missing from the server .env file.',
+  )
+}
+
+if (!supabaseUrl) {
+  throw new Error(
+    'SUPABASE_URL is missing from the server .env file.',
+  )
+}
+
+if (!supabaseSecretKey) {
+  throw new Error(
+    'SUPABASE_SECRET_KEY is missing from the server .env file.',
+  )
 }
 
 const ai = new GoogleGenAI({
-  apiKey,
+  apiKey: geminiApiKey,
 })
 
-const reviews: Review[] = [
+const supabase = createClient(
+  supabaseUrl,
+  supabaseSecretKey,
   {
-    id: '1',
-    customerName: 'Sarah M.',
-    rating: 5,
-    message:
-      'The staff was friendly and my order was ready earlier than expected.',
-    businessReply:
-      'Thank you, Sarah! We are glad you had a positive experience and appreciated the quick service.',
-    createdAt: new Date().toISOString(),
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
   },
-  {
-    id: '2',
-    customerName: 'Michael R.',
-    rating: 3,
-    message:
-      'The service was good, but the waiting time was longer than expected.',
-    businessReply: null,
-    createdAt: new Date().toISOString(),
-  },
-]
+)
+
+const formatReview = (row: ReviewRow): Review => ({
+  id: row.id,
+  customerName: row.customer_name,
+  rating: row.rating,
+  message: row.message,
+  businessReply: row.business_reply,
+  createdAt: row.created_at,
+})
 
 app.use(
   cors({
@@ -78,63 +103,109 @@ app.get('/api/health', (_request: Request, response: Response) => {
   })
 })
 
-app.get('/api/reviews', (_request: Request, response: Response) => {
-  response.status(200).json({
-    success: true,
-    reviews,
-  })
-})
+app.get(
+  '/api/reviews',
+  async (_request: Request, response: Response) => {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select(
+          'id, customer_name, rating, message, business_reply, created_at',
+        )
+        .order('created_at', {
+          ascending: false,
+        })
 
-app.post('/api/reviews', (request: Request, response: Response) => {
-  const { customerName, rating, message } = request.body
+      if (error) {
+        throw error
+      }
 
-  if (
-    typeof customerName !== 'string' ||
-    !customerName.trim() ||
-    typeof message !== 'string' ||
-    !message.trim()
-  ) {
-    response.status(400).json({
-      success: false,
-      message: 'Customer name and review message are required.',
-    })
-    return
-  }
+      const reviews = (data as ReviewRow[]).map(formatReview)
 
-  const numericRating = Number(rating)
+      response.status(200).json({
+        success: true,
+        reviews,
+      })
+    } catch (error) {
+      console.error('Supabase review loading error:', error)
 
-  if (
-    !Number.isInteger(numericRating) ||
-    numericRating < 1 ||
-    numericRating > 5
-  ) {
-    response.status(400).json({
-      success: false,
-      message: 'Rating must be between 1 and 5.',
-    })
-    return
-  }
+      response.status(500).json({
+        success: false,
+        message: 'Unable to load reviews.',
+      })
+    }
+  },
+)
 
-  const newReview: Review = {
-    id: crypto.randomUUID(),
-    customerName: customerName.trim(),
-    rating: numericRating,
-    message: message.trim(),
-    businessReply: null,
-    createdAt: new Date().toISOString(),
-  }
+app.post(
+  '/api/reviews',
+  async (request: Request, response: Response) => {
+    const { customerName, rating, message } = request.body
 
-  reviews.unshift(newReview)
+    if (
+      typeof customerName !== 'string' ||
+      !customerName.trim() ||
+      typeof message !== 'string' ||
+      !message.trim()
+    ) {
+      response.status(400).json({
+        success: false,
+        message:
+          'Customer name and review message are required.',
+      })
+      return
+    }
 
-  response.status(201).json({
-    success: true,
-    review: newReview,
-  })
-})
+    const numericRating = Number(rating)
+
+    if (
+      !Number.isInteger(numericRating) ||
+      numericRating < 1 ||
+      numericRating > 5
+    ) {
+      response.status(400).json({
+        success: false,
+        message: 'Rating must be between 1 and 5.',
+      })
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .insert({
+          customer_name: customerName.trim(),
+          rating: numericRating,
+          message: message.trim(),
+          business_reply: null,
+        })
+        .select(
+          'id, customer_name, rating, message, business_reply, created_at',
+        )
+        .single()
+
+      if (error) {
+        throw error
+      }
+
+      response.status(201).json({
+        success: true,
+        review: formatReview(data as ReviewRow),
+      })
+    } catch (error) {
+      console.error('Supabase review creation error:', error)
+
+      response.status(500).json({
+        success: false,
+        message: 'Unable to submit the review.',
+      })
+    }
+  },
+)
 
 app.post(
   '/api/reviews/:id/reply',
-  (request: Request, response: Response) => {
+  async (request: Request, response: Response) => {
     const { id } = request.params
     const { businessReply } = request.body
 
@@ -149,29 +220,50 @@ app.post(
       return
     }
 
-    const review = reviews.find((item) => item.id === id)
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .update({
+          business_reply: businessReply.trim(),
+        })
+        .eq('id', id)
+        .select(
+          'id, customer_name, rating, message, business_reply, created_at',
+        )
+        .maybeSingle()
 
-    if (!review) {
-      response.status(404).json({
-        success: false,
-        message: 'Review not found.',
+      if (error) {
+        throw error
+      }
+
+      if (!data) {
+        response.status(404).json({
+          success: false,
+          message: 'Review not found.',
+        })
+        return
+      }
+
+      response.status(200).json({
+        success: true,
+        review: formatReview(data as ReviewRow),
       })
-      return
+    } catch (error) {
+      console.error('Supabase reply publishing error:', error)
+
+      response.status(500).json({
+        success: false,
+        message: 'Unable to publish the reply.',
+      })
     }
-
-    review.businessReply = businessReply.trim()
-
-    response.status(200).json({
-      success: true,
-      review,
-    })
   },
 )
 
 app.post(
   '/api/generate-response',
   async (request: Request, response: Response) => {
-    const { review, rating, tone, responseLength } = request.body
+    const { review, rating, tone, responseLength } =
+      request.body
 
     if (typeof review !== 'string' || !review.trim()) {
       response.status(400).json({
@@ -192,8 +284,7 @@ app.post(
     const lengthInstructions: Record<string, string> = {
       Short:
         'Write 20 to 35 words in one short paragraph, about two lines.',
-      Medium:
-        'Write 40 to 65 words in one paragraph.',
+      Medium: 'Write 40 to 65 words in one paragraph.',
       Long:
         'Write 70 to 100 words in one or two short paragraphs.',
     }
