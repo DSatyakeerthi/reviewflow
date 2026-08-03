@@ -12,6 +12,9 @@ type ReviewRow = {
   rating: number
   message: string
   business_reply: string | null
+  ai_draft: string | null
+  requires_approval: boolean
+  status: 'pending' | 'needs_review' | 'published'
   created_at: string
 }
 
@@ -21,6 +24,9 @@ type Review = {
   rating: number
   message: string
   businessReply: string | null
+  aiDraft: string | null
+  requiresApproval: boolean
+  status: 'pending' | 'needs_review' | 'published'
   createdAt: string
 }
 
@@ -70,6 +76,9 @@ const formatReview = (row: ReviewRow): Review => ({
   rating: row.rating,
   message: row.message,
   businessReply: row.business_reply,
+  aiDraft: row.ai_draft,
+  requiresApproval: row.requires_approval,
+  status: row.status,
   createdAt: row.created_at,
 })
 
@@ -110,7 +119,7 @@ app.get(
       const { data, error } = await supabase
         .from('reviews')
         .select(
-          'id, customer_name, rating, message, business_reply, created_at',
+          'id, customer_name, rating, message, business_reply, ai_draft, requires_approval, status, created_at',
         )
         .order('created_at', {
           ascending: false,
@@ -170,17 +179,74 @@ app.post(
       return
     }
 
+    const automaticTone =
+      numericRating <= 2
+        ? 'Apologetic'
+        : numericRating >= 4
+          ? 'Friendly'
+          : 'Professional'
+
     try {
+      const prompt = `
+You are helping a business respond to a customer review.
+
+Customer review:
+"${message.trim()}"
+
+Star rating: ${numericRating} out of 5
+Requested response tone: ${automaticTone}
+
+Requirements:
+- Write 20 to 35 words in one short paragraph.
+- Refer naturally to the customer's actual feedback.
+- Do not invent details, refunds, actions, or resolutions.
+- Do not blame the customer.
+- Avoid promising future improvements.
+- Return only the response text.
+`
+
+      const generationResult = await ai.models.generateContent({
+        model: 'gemini-3.5-flash-lite',
+        contents: prompt,
+        config: {
+          maxOutputTokens: 180,
+          temperature: 0.3,
+        },
+      })
+
+      const generatedReply = generationResult.text?.trim()
+
+      if (!generatedReply) {
+        throw new Error('Gemini returned an empty response.')
+      }
+
+      const requiresApproval = numericRating <= 3
+
+      const reviewData = {
+        customer_name: customerName.trim(),
+        rating: numericRating,
+        message: message.trim(),
+
+        business_reply: requiresApproval
+          ? null
+          : generatedReply,
+
+        ai_draft: requiresApproval
+          ? generatedReply
+          : null,
+
+        requires_approval: requiresApproval,
+
+        status: requiresApproval
+          ? 'needs_review'
+          : 'published',
+      }
+
       const { data, error } = await supabase
         .from('reviews')
-        .insert({
-          customer_name: customerName.trim(),
-          rating: numericRating,
-          message: message.trim(),
-          business_reply: null,
-        })
+        .insert(reviewData)
         .select(
-          'id, customer_name, rating, message, business_reply, created_at',
+          'id, customer_name, rating, message, business_reply, ai_draft, requires_approval, status, created_at',
         )
         .single()
 
@@ -193,11 +259,15 @@ app.post(
         review: formatReview(data as ReviewRow),
       })
     } catch (error) {
-      console.error('Supabase review creation error:', error)
+      console.error(
+        'Automatic review response error:',
+        error,
+      )
 
       response.status(500).json({
         success: false,
-        message: 'Unable to submit the review.',
+        message:
+          'Unable to submit and process the review.',
       })
     }
   },
@@ -228,7 +298,7 @@ app.post(
         })
         .eq('id', id)
         .select(
-          'id, customer_name, rating, message, business_reply, created_at',
+          'id, customer_name, rating, message, business_reply, ai_draft, requires_approval, status, created_at',
         )
         .maybeSingle()
 
